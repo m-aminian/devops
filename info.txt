@@ -1,0 +1,298 @@
+#################################### 1_What is Jenkins #############################################
+
+Jenkins is an automation platform that allows you to build, test and deploy software using pipelines.
+
+Jenkins infrastructure:
+Master server: 1_Controls pipelines 2_Schedule builds to agents
+Agents/Minions: Perform the build (Run the job in their workspace)
+
+Workflow: 
+A: a developer commits a code to repository
+B: The jenkins master becomes aware of this commit and triggers the appropriate pipelines and distrubutes the build to one of the agents.
+C: Master node selects the appropriate node based on labels.
+D: Agent runs the build which is usually bunch of linux commands to build, test and distribute your code.
+
+
+There are 2 main categories of jenkins agents:
+1:Permanent node agents: You can think of these as stand alone linux or windows servers that are configured to run jenkins jobs.(You need to have Java installed and you need to make sure SSH is setup as the master server usually makes connections over SSH.)
+
+2: Cloud agents: Docker, K8s, AWS
+
+
+Two main build jobs:
+1: Freestyle build projects: Simplest method to create a build, They are like shell scripts that can be triggered by specific events.
+2: pipelines: Are jenkins files written in Groovy syntax to specify what happens in the build.Use stages to breakdown the components of the build. 
+Common stages:
+Clone: Pulling down the code from a git repository and setting up the local environment on the agent.
+Build: Takes the code and builds it.
+Test:
+Package:
+Deploy:
+
+
+#################################### 2_Install Jenkins on Docker #############################################
+
+git clone git@github.com:m-aminian/devops.git
+
+cd jenkins-101
+
+docker build -t myjenkins-blueocean:2.414.2 .
+
+docker network create jenkins
+
+docker network ls
+
+docker run --name jenkins-blueocean --restart=on-failure --detach \
+  --network jenkins --env DOCKER_HOST=tcp://docker:2376 \
+  --env DOCKER_CERT_PATH=/certs/client --env DOCKER_TLS_VERIFY=1 \
+  --publish 8080:8080 --publish 50000:50000 \
+  --volume jenkins-data:/var/jenkins_home \
+  --volume jenkins-docker-certs:/certs/client:ro \
+  myjenkins-blueocean:2.332.3-1
+
+docker ps
+
+docker exec -it containerId cat /var/jenkins_home/secrets/initialAdminPassword
+
+#################################### 3_Jenkins UI #############################################
+
+New Item: This is where you create your jobs and pipelines.
+People: This is where you administrate user accounts.
+Build History: Gives you history of all your jobs.
+Manage Jenkins: has all your management stuff.This is where you install agents, plugins ...
+My views: This is where you organize your jobs and display things nicely.
+Open blueocean: Is a plugin that inhances your CI/CD pipelines.
+
+
+#################################### 4_Create your first project #############################################
+
+click on new item.
+
+Enter an item name: my_first_job (Do not use space)
+
+Select Freestyle project and hit ok.
+
+In Build Steps section click on Execute shell.
+
+Command: echo "Hello World"
+
+click on Build now.
+
+#################################### 5_Environmental variables #############################################
+
+click on configure.
+
+In Build section, click on the list of available environment variables.
+
+check for BUILD_ID, BUILD_URL
+
+Command: 
+echo "Hello World"
+echo "The build id of this job is ${BUILD_ID}"
+echo "The build url of this job is ${BUILD_URL}"
+
+#################################### 6_Work space #############################################
+
+click on configure.
+
+Command: 
+echo "Hello World"
+echo "The build id of this job is ${BUILD_ID}"
+echo "The build url of this job is ${BUILD_URL}"
+ls -ltr
+echo 1234 > test.txt
+ls -ltr
+
+click on build now.
+check the output.
+Back to the project and click on workspace. check for test.txt
+
+click on build now again. You will see the test.txt already exist. This means we are not clearing our workspace. and the files from previous build are already in our directory.
+
+click on configure.
+Build environment: Delete workspace before builds start.
+click build now.
+check the output.
+
+#################################### 7_Jenkins file system #############################################
+
+docker exec -it jenkins-blueocean bash
+
+pwd
+
+cd /var/jenkins_home
+
+ls -l
+
+cd ./workspace
+
+ls -l
+
+cd my_first_job
+
+ls -l
+
+cat test.txt
+
+cd ~
+
+pwd
+
+#################################### 8_Create the second job #############################################
+
+click on new item.
+
+Enter an item name: my_python_job
+
+Source Code management: Git
+
+Repository url: https://github.com/m-aminian/devops
+
+Build Steps: Execute shell
+
+Command: python3 helloworld.py
+
+Build now.
+
+#################################### 8_setting up agents #############################################
+
+click on Manage Jenkins
+
+click on manage nodes 
+
+On the left hand options we have new nodes and clouds.
+
+If you click on new node, this is how you configure a Permanent agent. This is old deprecated way.
+
+click on cloud.
+
+click on Install plugin.
+
+click on Docker. Download now and install after restart.
+
+After restart. click on manage jenkins.Go to plugin manager. go to installed section and check for Docker.
+
+click on manage jenkins, manage nodes and clouds. configure cloud.
+
+Add a new cloud: Docker
+
+click on Docker cloud details
+
+docker run -d --restart=always -p 127.0.0.1:2376:2375 --network jenkins -v /var/run/docker.sock:/var/run/docker.sock alpine/socat tcp-listen:2375,fork,reuseaddr unix-connect:/var/run/docker.sock
+
+docker ps
+
+docker inspect containerId
+
+Docker host uri: tcp://172.18.0.3:2375
+
+check Enabled.
+
+#################################### 9_create docker agent template #############################################
+
+Add docker template
+
+Labels: docker-agent-alpine
+
+Enabled
+
+Name: docker-agent-alpine
+
+Docker image:jenkins/agent:alpine-jdk11
+
+Instance capacity: 2
+
+Remote File System Root: /home/jenkins
+
+#################################### 9_Run my_first_job on docker agent #############################################
+
+Click on Dashboard
+
+Click on my_first_job
+
+Click on configure.
+
+Restrict where this project can be run
+
+Label expression: docker-agent-alpine
+
+Build now.
+
+#################################### 9_Run my_python_job on docker agent #############################################
+
+
+Click on Dashboard
+
+Click on my_python_job
+
+Click on configure.
+
+Restrict where this project can be run
+
+Label expression: docker-agent-alpine
+
+Build now.
+
+#################################### 10_Run my_python_job on docker agent #############################################
+
+click on Manage Jenkins
+
+click on cloud
+
+click on Docker agent templates
+
+Labels: docker-agent-python
+
+Name: docker-agent-python
+
+Docker image: devopsjourney1/myjenkinsagents:python
+
+Instance capacity: 2
+
+Remote File System Root: /home/jenkins
+
+click on Dashboard
+
+click on my_python_job
+
+click on configure
+
+Label expression: docker-agent-python
+
+build now.
+
+#################################### 11_Schedule #############################################
+
+Build triggers:
+Poll SCM: is a way to have your jenkins master monitor your github repository and check for any changes.
+Schedule: */5 * * * *
+
+#################################### 12_Pipeline #############################################
+
+click on new item.
+
+Enter an item name: my_first_build_pipeline
+
+click on pipeline
+
+paste the jenkinsfile.template in script section
+
+build now
+
+Fix the bug and build now.
+
+#################################### 13_Pipeline with jenkins file #############################################
+
+click on configure
+
+Definition: Pipeline Script From SCM
+
+SCM: Git
+
+Repository URL: https://github.com/m-aminian/devops
+
+Script Path: Jenkinsfile
+
+#################################### 14_Blue Ocean #############################################
+
+
